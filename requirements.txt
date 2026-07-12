@@ -1,0 +1,7 @@
+# Install torch and torchvision separately for the target CPU/CUDA platform.
+numpy
+opencv-python
+Pillow
+scipy
+tqdm
+matplotlib

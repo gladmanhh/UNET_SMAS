@@ -1,0 +1,22 @@
+{
+  "checkpoint": "picosam2_unet_320x192.pt",
+  "architecture": "PicoSAM2BaseUNet",
+  "input_size": [320, 192],
+  "model_classes": ["background", "dermis", "smas", "bone"],
+  "display_layers": ["dermis", "subc", "smas", "muscle", "bone"],
+  "parameters": 914885,
+  "checkpoint_bytes": 3775716,
+  "profiled_flops_per_frame": 3275489280,
+  "best_epoch": 1,
+  "validation_images": 72,
+  "validation": {
+    "mean_dice": 0.941226890113553,
+    "mean_iou": 0.8935128941580102,
+    "dermis_iou": 0.9613441990481483,
+    "smas_iou": 0.775315006573995,
+    "bone_iou": 0.9438794768518872
+  },
+  "training_outputs": ["output1", "output20", "output30", "output42"],
+  "validation_outputs": ["output10"],
+  "max_output42_frame": 290
+}

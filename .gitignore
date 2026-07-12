@@ -1,0 +1,49 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Private/local data. Keep only the public layout guide.
+data/*
+!data/README.md
+experiments/**/data/
+
+# Generated inference outputs
+outputs*/
+**/outputs*/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+
+# Training artifacts and intermediate checkpoints
+**/runs/
+**/runs_*/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.tflite
+!PICOSAM2baseUNet/checkpoints/picosam2_unet_320x192.pt
+
+# Generated reports and visualizations
+predictions*.csv
+train_log*.csv
+*.png
+*.jpg
+*.jpeg
+
+# Local deployment snapshot and archived experiments
+deploy_pi/
+experiments/_archived_picosam2/
