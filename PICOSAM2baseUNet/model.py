@@ -34,9 +34,9 @@ class ConvPair(nn.Module):
 
 
 class PicoSAM2BaseUNet(nn.Module):
-    """Image-only SMAS segmentation U-Net inspired by PicoSAM2's small U-Net."""
+    """Image-only 4-class layer segmentation U-Net inspired by PicoSAM2."""
 
-    def __init__(self, in_channels: int = 3, base_channels: int = 32, out_channels: int = 1):
+    def __init__(self, in_channels: int = 3, base_channels: int = 32, out_channels: int = 4):
         super().__init__()
         c1 = base_channels
         c2 = c1 * 2

@@ -1,82 +1,63 @@
 # PicoSAM2BaseUNet
 
-최종 full-frame, prompt-free segmentation 구현입니다. 전체 사용법은 저장소
-루트의 [`README.md`](../README.md)를 먼저 참고하세요.
-
-## Final path
+최종 full-frame, prompt-free 4-class segmentation 구현입니다. 모델은 한 장의 RGB
+frame을 입력받아 `background`, `dermis`, `SMAS`, `bone`을 예측합니다. 렌더링할
+때 경계 사이를 채워 `dermis`, `subc`, `SMAS`, `muscle`, `bone`의 5개 층으로
+표시합니다.
 
 ```text
 RGB frame (320 x 192)
   -> depthwise separable U-Net
   -> background / dermis / SMAS / bone
-  -> postprocessing
+  -> boundary postprocessing
   -> five-layer MP4 visualization
-```
-
-기본 checkpoint:
-
-```text
-checkpoints/picosam2_unet_320x192.pt
 ```
 
 ## Inference
 
-저장소 root에서:
+저장소 root에서 다음 명령을 실행합니다.
 
 ```bash
-python PICOSAM2baseUNet/launcher.py infer-bone 25
+python PICOSAM2baseUNet/infer.py 25
 ```
 
-이 명령은 아래 입력을 자동으로 찾습니다.
+입력과 출력 경로는 다음과 같습니다.
 
 ```text
-data/frames/output25/frames/*.png
+input:  data/frames/output25/frames/*.png
+output: PICOSAM2baseUNet/outputs/output25/output25_segmentation.mp4
 ```
 
-명시적인 경로도 사용할 수 있습니다.
+임의의 frame 폴더를 지정할 수도 있습니다.
 
 ```bash
-python PICOSAM2baseUNet/infer_bone_multiclass.py custom \
+python PICOSAM2baseUNet/infer.py custom \
   --frames-dir /path/to/frames
 ```
 
-최종 결과:
-
-```text
-PICOSAM2baseUNet/outputs_bone_multiclass/output25/output25_segmentation.mp4
-```
-
-추론 pipeline depth 비교:
-
-```bash
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 1
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 2
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 3
-```
+기본 checkpoint는 `checkpoints/picosam2_unet_320x192.pt`이며 모든 frame을
+처리한 뒤 최종 MP4 하나만 저장합니다.
 
 ## Training
 
 ```bash
-python PICOSAM2baseUNet/train_bone_multiclass.py \
+python PICOSAM2baseUNet/train.py \
   --annotations data/annotations.json \
   --dermis-root data/dermis \
   --bone-root data/bone \
-  --width 320 --height 192 \
   --epochs 8 --batch-size 12
 ```
 
-데이터 구조는 [`data/README.md`](../data/README.md)에 정리되어 있습니다.
+기본 입력 크기는 `320 x 192`입니다. 기본 split은 output 1, 20, 30, 42를
+train에 사용하고 output 10을 validation에 사용하며, output 42는 frame 290까지
+포함합니다. 데이터 구조는 [`data/README.md`](../data/README.md)를 참고하세요.
 
 ## Files
 
 | File | Role |
 | --- | --- |
 | `model.py` | depthwise separable U-Net architecture |
-| `infer_bone_multiclass.py` | final inference, postprocessing, pipeline, video output |
-| `train_bone_multiclass.py` | final 4-class supervised training |
-| `launcher.py` | short train/inference commands |
+| `train.py` | final 4-class supervised training |
+| `infer.py` | inference, postprocessing, rendering, MP4 output |
 | `common.py` | data discovery and image conversion helpers |
 | `checkpoints/model_card.json` | checkpoint metadata and validation metrics |
-
-`infer.py`, `train.py`, `infer_multiclass.py`, and `train_multiclass.py` are kept
-for the earlier SMAS-only and dermis+SMAS stages.

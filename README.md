@@ -36,7 +36,7 @@ Checkpoint와 세부 metric은
 
 ```text
 UNET_SMAS/
-  PICOSAM2baseUNet/        # final model, training, inference, launcher
+  PICOSAM2baseUNet/        # final 4-class model, training, inference
     checkpoints/           # public final checkpoint and model card
   experiments/             # archived detector/crop alternatives (source only)
   data/README.md            # private data layout
@@ -87,28 +87,23 @@ data/frames/output25/frames/frame_00002.png
 ...
 ```
 
-프로젝트 root에서 실행합니다.
+프로젝트 root에서 실행합니다. `25`를 입력하면 `output25` 전체 frame을 자동으로
+읽습니다.
 
 ```bash
-python PICOSAM2baseUNet/launcher.py infer-bone 25
-```
-
-또는 inference script를 직접 실행할 수 있습니다.
-
-```bash
-python PICOSAM2baseUNet/infer_bone_multiclass.py 25
+python PICOSAM2baseUNet/infer.py 25
 ```
 
 결과는 하나의 영상으로 저장됩니다.
 
 ```text
-PICOSAM2baseUNet/outputs_bone_multiclass/output25/output25_segmentation.mp4
+PICOSAM2baseUNet/outputs/output25/output25_segmentation.mp4
 ```
 
 다른 frame 폴더를 직접 지정하려면:
 
 ```bash
-python PICOSAM2baseUNet/infer_bone_multiclass.py custom \
+python PICOSAM2baseUNet/infer.py custom \
   --frames-dir /path/to/frames
 ```
 
@@ -125,16 +120,16 @@ U-Net depth가 아닙니다. CPU 환경에서는 `1`, `2`, `3`을 비교하여 t
 가장 높은 값을 사용하세요.
 
 ```bash
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 1
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 2
-python PICOSAM2baseUNet/launcher.py infer-bone 25 --pipeline-depth 3
+python PICOSAM2baseUNet/infer.py 25 --pipeline-depth 1
+python PICOSAM2baseUNet/infer.py 25 --pipeline-depth 2
+python PICOSAM2baseUNet/infer.py 25 --pipeline-depth 3
 ```
 
 후처리 없이 raw model 경향을 확인할 수도 있습니다.
 
 ```bash
-python PICOSAM2baseUNet/infer_bone_multiclass.py 25 --no-connect-smas-edges
-python PICOSAM2baseUNet/infer_bone_multiclass.py 25 --no-clean-bone
+python PICOSAM2baseUNet/infer.py 25 --no-connect-smas-edges
+python PICOSAM2baseUNet/infer.py 25 --no-clean-bone
 ```
 
 ## Training
@@ -142,7 +137,7 @@ python PICOSAM2baseUNet/infer_bone_multiclass.py 25 --no-clean-bone
 데이터 구조는 [`data/README.md`](data/README.md)를 참고하세요.
 
 ```bash
-python PICOSAM2baseUNet/train_bone_multiclass.py \
+python PICOSAM2baseUNet/train.py \
   --annotations data/annotations.json \
   --dermis-root data/dermis \
   --bone-root data/bone \

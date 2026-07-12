@@ -1,20 +1,16 @@
-import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
-from PIL import Image, ImageDraw
+from PIL import Image
 
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 CLASSYS_ROOT = PROJECT_ROOT.parent / "CLASSYS-BEAUTY"
 DATA_ROOT = PROJECT_ROOT / "data"
-DEFAULT_RUN_DIR = BASE_DIR / "runs" / "full_32ch"
-DEFAULT_CHECKPOINT = DEFAULT_RUN_DIR / "best.pt"
-DEFAULT_OUTPUT_ROOT = BASE_DIR / "outputs"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
 try:
@@ -43,15 +39,6 @@ def normalize_output_name(value: str) -> str:
 
 def natural_key(path: Path) -> list[object]:
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", path.name)]
-
-
-def frame_output_name(image_path: Path, suffix: str) -> str:
-    stem = image_path.stem
-    if stem.startswith("frame_"):
-        return f"frame__{stem[len('frame_'):]}_{suffix}.png"
-    if stem.endswith("_detect"):
-        return f"{stem[:-7]}_{suffix}.png"
-    return f"{stem}_{suffix}.png"
 
 
 def resolve_frames_dir(output_id: str, frames_dir: str | None = None) -> Path:
@@ -83,30 +70,3 @@ def tensor_from_image(image: Image.Image, size: Size2D) -> torch.Tensor:
     resized = image.resize((size.width, size.height), RESAMPLE_BILINEAR)
     arr = np.array(resized.convert("RGB"), dtype=np.float32) / 255.0
     return torch.from_numpy(arr.transpose(2, 0, 1))
-
-
-def tensor_from_mask(mask: Image.Image, size: Size2D) -> torch.Tensor:
-    resized = mask.resize((size.width, size.height), RESAMPLE_NEAREST)
-    arr = (np.array(resized.convert("L")) > 0).astype(np.float32)
-    return torch.from_numpy(arr[None, :, :])
-
-
-def overlay_mask(image: Image.Image, mask: Image.Image, label: str = "PICOSAM2baseUNet") -> Image.Image:
-    base = image.convert("RGBA")
-    mask_arr = np.array(mask.convert("L")) > 0
-    color = np.zeros((image.height, image.width, 4), dtype=np.uint8)
-    color[mask_arr] = [255, 220, 0, 95]
-    overlay = Image.fromarray(color, mode="RGBA")
-    draw = ImageDraw.Draw(overlay)
-    draw.rectangle([4, 4, min(image.width - 1, 236), 24], fill=(0, 0, 0, 150))
-    draw.text((8, 8), label, fill=(255, 255, 255, 255))
-    return Image.alpha_composite(base, overlay).convert("RGB")
-
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["image", "mask", "overlay", "mask_pixels", "mean_probability"]
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
