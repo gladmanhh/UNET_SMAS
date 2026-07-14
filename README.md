@@ -137,13 +137,12 @@ python PICOSAM2baseUNet/infer.py 25 --no-clean-bone
 데이터 구조는 [`data/README.md`](data/README.md)를 참고하세요.
 
 ```bash
-python PICOSAM2baseUNet/train.py \
-  --annotations data/annotations.json \
-  --dermis-root data/dermis \
-  --bone-root data/bone \
-  --width 320 --height 192 \
-  --epochs 8 --batch-size 12
+python PICOSAM2baseUNet/train.py
 ```
+
+trainer는 `data/images`와 `data/masks`에서 같은 이름의 파일을 자동으로
+짝지어 읽습니다. mask 한 장에 `background=0`, `dermis=1`, `SMAS=2`,
+`bone=3` class index가 저장되어 있어 별도의 외부 label 경로가 필요하지 않습니다.
 
 기본 split은 `output1, output20, output30, output42`를 train에 사용하고
 `output10`을 validation에 사용합니다. `output42`는 frame 290까지만 train에

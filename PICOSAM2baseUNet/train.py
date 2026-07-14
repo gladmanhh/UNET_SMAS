@@ -12,18 +12,16 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import functional as VF
 from tqdm import tqdm
 
-from common import DATA_ROOT, PROJECT_ROOT, RESAMPLE_NEAREST, Size2D, tensor_from_image
+from common import DATA_ROOT, RESAMPLE_NEAREST, Size2D, tensor_from_image
 from model import PicoSAM2BaseUNet, count_params
 
 
 BASE_DIR = Path(__file__).resolve().parent
-LOCAL_DERMIS_ROOT = PROJECT_ROOT.parent / "beauty" / "analog" / "analog_result_24_v1"
-LOCAL_BONE_ROOT = PROJECT_ROOT.parent / "CLASSYS-BEAUTY" / "tools" / "outputs"
-DEFAULT_DERMIS_ROOT = LOCAL_DERMIS_ROOT if LOCAL_DERMIS_ROOT.exists() else DATA_ROOT / "dermis"
-DEFAULT_BONE_ROOT = LOCAL_BONE_ROOT if LOCAL_BONE_ROOT.exists() else DATA_ROOT / "bone"
 DEFAULT_INIT = BASE_DIR / "checkpoints" / "picosam2_unet_320x192.pt"
 DEFAULT_RUN_DIR = BASE_DIR / "runs" / "picosam2_unet_320x192"
 CLASS_NAMES = ["background", "dermis", "smas", "bone"]
+MASK_EXTENSIONS = {".png", ".bmp", ".tif", ".tiff"}
+SAMPLE_NAME_PATTERN = re.compile(r"^(output\d+)_frame_+(\d+)$", flags=re.IGNORECASE)
 
 
 def parse_outputs(text: str) -> set[str]:
@@ -39,86 +37,91 @@ def parse_outputs(text: str) -> set[str]:
     return outputs
 
 
-def frame_number(name: str) -> int:
-    match = re.search(r"(\d+)", name)
+def parse_sample_name(path: Path) -> tuple[str, int]:
+    match = SAMPLE_NAME_PATTERN.match(path.stem)
     if not match:
-        return -1
-    return int(match.group(1))
+        raise ValueError(
+            f"Mask filename must look like output1_frame_00001.png, got: {path.name}"
+        )
+    return match.group(1).lower(), int(match.group(2))
 
 
 class LayerSegmentationDataset(Dataset):
     def __init__(
         self,
-        annotations: list[dict],
+        data_root: Path,
+        split: str,
         outputs: set[str],
         image_size: Size2D,
-        dermis_root: Path,
-        bone_root: Path,
         train: bool,
         max_output42_frame: int | None,
     ):
-        rows = [row for row in annotations if row["output"] in outputs]
-        if max_output42_frame is not None:
-            rows = [
-                row
-                for row in rows
-                if row["output"] != "output42" or frame_number(row["frame"]) <= max_output42_frame
-            ]
+        image_root = data_root / "images" / split
+        mask_root = data_root / "masks" / split
+        if not image_root.is_dir():
+            raise FileNotFoundError(f"Missing image split folder: {image_root}")
+        if not mask_root.is_dir():
+            raise FileNotFoundError(f"Missing mask split folder: {mask_root}")
+
         self.image_size = image_size
-        self.dermis_root = dermis_root
-        self.bone_root = bone_root
         self.train = train
         self.rows = []
         missing = []
-        for row in rows:
-            paths = [PROJECT_ROOT / row["image_path"], PROJECT_ROOT / row["mask_path"], self.dermis_path(row), self.bone_path(row)]
-            if all(path.exists() for path in paths):
-                self.rows.append(row)
+        mask_paths = sorted(
+            path
+            for path in mask_root.rglob("*")
+            if path.is_file() and path.suffix.lower() in MASK_EXTENSIONS
+        )
+        for mask_path in mask_paths:
+            relative_path = mask_path.relative_to(mask_root)
+            output, frame_index = parse_sample_name(mask_path)
+            if output not in outputs:
+                continue
+            if (
+                max_output42_frame is not None
+                and output == "output42"
+                and frame_index > max_output42_frame
+            ):
+                continue
+            image_path = image_root / relative_path
+            if image_path.exists():
+                self.rows.append((image_path, mask_path, mask_path.stem))
             else:
-                missing.append(row["id"])
+                missing.append(str(relative_path))
         if not self.rows:
-            raise RuntimeError(f"No usable rows. Missing examples: {missing[:5]}")
+            raise RuntimeError(
+                f"No paired samples for split={split}, outputs={sorted(outputs)} in {data_root}. "
+                f"Missing image examples: {missing[:5]}"
+            )
         if missing:
-            print(f"[Warn] skipped {len(missing)} rows without matching image/dermis/SMAS/bone masks.")
-
-    def dermis_path(self, row: dict) -> Path:
-        return self.dermis_root / row["output"] / "dermis_masks" / row["frame"]
-
-    def bone_path(self, row: dict) -> Path:
-        return self.bone_root / row["output"] / "labels" / row["frame"]
+            print(f"[Warn] skipped {len(missing)} masks without a matching image.")
 
     def __len__(self) -> int:
         return len(self.rows)
 
     def __getitem__(self, index: int):
-        row = self.rows[index]
-        image = Image.open(PROJECT_ROOT / row["image_path"]).convert("RGB")
-        dermis = Image.open(self.dermis_path(row)).convert("L")
-        smas = Image.open(PROJECT_ROOT / row["mask_path"]).convert("L")
-        bone = Image.open(self.bone_path(row)).convert("L")
+        image_path, mask_path, sample_id = self.rows[index]
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
+        with Image.open(mask_path) as source:
+            mask = source.copy()
         if self.train and np.random.random() < 0.5:
             image = VF.hflip(image)
-            dermis = VF.hflip(dermis)
-            smas = VF.hflip(smas)
-            bone = VF.hflip(bone)
-        return tensor_from_image(image, self.image_size), make_target(dermis, smas, bone, self.image_size), row["id"]
+            mask = VF.hflip(mask)
+        return tensor_from_image(image, self.image_size), make_target(mask, self.image_size), sample_id
 
 
-def make_target(dermis: Image.Image, smas: Image.Image, bone: Image.Image, size: Size2D) -> torch.Tensor:
-    dermis_arr = np.array(dermis.resize((size.width, size.height), RESAMPLE_NEAREST).convert("L")) > 0
-    smas_arr = np.array(smas.resize((size.width, size.height), RESAMPLE_NEAREST).convert("L")) > 0
-    bone_arr = np.array(bone.resize((size.width, size.height), RESAMPLE_NEAREST).convert("L")) > 0
-    target = np.zeros((size.height, size.width), dtype=np.int64)
-    target[dermis_arr] = 1
-    target[smas_arr] = 2
-    target[bone_arr] = 3
-    return torch.from_numpy(target)
-
-
-def load_annotations(path: Path = DATA_ROOT / "annotations.json") -> list[dict]:
-    with path.open("r", encoding="utf-8") as f:
-        payload = json.load(f)
-    return payload["annotations"]
+def make_target(mask: Image.Image, size: Size2D) -> torch.Tensor:
+    resized = mask.resize((size.width, size.height), RESAMPLE_NEAREST)
+    target = np.asarray(resized)
+    if target.ndim != 2:
+        raise ValueError(f"Expected a single-channel class-index mask, got shape={target.shape}")
+    invalid = np.unique(target[(target < 0) | (target >= len(CLASS_NAMES))])
+    if invalid.size:
+        raise ValueError(
+            f"Mask contains invalid class values {invalid.tolist()}; expected integers 0-{len(CLASS_NAMES) - 1}."
+        )
+    return torch.from_numpy(target.astype(np.int64, copy=True))
 
 
 def set_seed(seed: int) -> None:
@@ -218,28 +221,24 @@ def train(args: argparse.Namespace) -> None:
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     image_size = Size2D(args.width, args.height)
-    annotations = load_annotations(Path(args.annotations))
+    data_root = Path(args.data_root).resolve()
     train_outputs = parse_outputs(args.train_outputs)
     val_outputs = parse_outputs(args.val_outputs)
     run_dir = Path(args.run_dir) if args.run_dir else DEFAULT_RUN_DIR
-    dermis_root = Path(args.dermis_root)
-    bone_root = Path(args.bone_root)
 
     train_ds = LayerSegmentationDataset(
-        annotations,
+        data_root,
+        args.train_split,
         train_outputs,
         image_size,
-        dermis_root,
-        bone_root,
         train=True,
         max_output42_frame=args.max_output42_frame,
     )
     val_ds = LayerSegmentationDataset(
-        annotations,
+        data_root,
+        args.val_split,
         val_outputs,
         image_size,
-        dermis_root,
-        bone_root,
         train=False,
         max_output42_frame=None,
     )
@@ -271,6 +270,7 @@ def train(args: argparse.Namespace) -> None:
     best_iou = -1.0
     log_rows = []
     print(f"[Train] classes={CLASS_NAMES}")
+    print(f"[Train] data_root={data_root}")
     print(f"[Train] train_outputs={sorted(train_outputs)} val_outputs={sorted(val_outputs)}")
     print(f"[Train] train={len(train_ds)} val={len(val_ds)} max_output42_frame={args.max_output42_frame}")
     print(f"[Train] params={count_params(model):,} init_keys={init_count} device={device} run_dir={run_dir}")
@@ -328,9 +328,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Train mutually exclusive dermis + SMAS + bone multiclass segmentation.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--annotations", default=str(DATA_ROOT / "annotations.json"))
-    parser.add_argument("--dermis-root", default=str(DEFAULT_DERMIS_ROOT))
-    parser.add_argument("--bone-root", default=str(DEFAULT_BONE_ROOT))
+    parser.add_argument("--data-root", default=str(DATA_ROOT))
+    parser.add_argument("--train-split", default="train")
+    parser.add_argument("--val-split", default="val")
     parser.add_argument("--train-outputs", default="1,20,30,42")
     parser.add_argument("--val-outputs", default="10")
     parser.add_argument("--max-output42-frame", type=int, default=290)

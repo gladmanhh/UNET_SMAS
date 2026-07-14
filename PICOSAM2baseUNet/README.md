@@ -41,16 +41,17 @@ python PICOSAM2baseUNet/infer.py custom \
 ## Training
 
 ```bash
-python PICOSAM2baseUNet/train.py \
-  --annotations data/annotations.json \
-  --dermis-root data/dermis \
-  --bone-root data/bone \
-  --epochs 8 --batch-size 12
+python PICOSAM2baseUNet/train.py
 ```
 
-기본 입력 크기는 `320 x 192`입니다. 기본 split은 output 1, 20, 30, 42를
-train에 사용하고 output 10을 validation에 사용하며, output 42는 frame 290까지
-포함합니다. 데이터 구조는 [`data/README.md`](../data/README.md)를 참고하세요.
+`data/images/<split>`과 `data/masks/<split>` 아래에서 이름이 같은 image/mask를
+자동으로 짝지으므로 annotation 파일이나 외부 label 경로가 필요하지 않습니다.
+mask는 `0=background`, `1=dermis`, `2=SMAS`, `3=bone`인 class-index PNG입니다.
+
+기본 입력 크기는 `320 x 192`, epoch은 8, batch size는 12입니다. 기본 split은
+output 1, 20, 30, 42를 train에 사용하고 output 10을 validation에 사용하며,
+output 42는 frame 290까지 포함합니다. 데이터 구조는
+[`data/README.md`](../data/README.md)를 참고하세요.
 
 ## Files
 
