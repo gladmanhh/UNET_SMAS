@@ -40,6 +40,11 @@ python PICOSAM2baseUNet/infer.py custom \
 
 ## Training
 
+1. [Google Drive 학습 데이터](https://drive.google.com/drive/folders/1uNTCNoBQWgii9hYUwY3jDkA3U5c1iJ4F)에서
+   `images`, `masks` 폴더를 다운로드합니다.
+2. 두 폴더를 저장소의 `data/images`, `data/masks`에 배치합니다.
+3. 저장소 root에서 학습을 실행합니다.
+
 ```bash
 python PICOSAM2baseUNet/train.py
 ```

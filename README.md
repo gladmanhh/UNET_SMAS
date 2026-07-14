@@ -77,9 +77,10 @@ pip install --no-cache-dir -r requirements.txt
 python -c "import torch, cv2; print(torch.__version__, cv2.__version__)"
 ```
 
-## Quick start
+## Quick start: inference
 
-먼저 frame을 다음 경로에 배치합니다.
+아래 경로는 학습 데이터 경로가 아니라 `output` 번호로 실행하는 추론용 frame
+경로입니다. 먼저 frame을 다음과 같이 배치합니다.
 
 ```text
 data/frames/output25/frames/frame_00001.png
@@ -134,7 +135,9 @@ python PICOSAM2baseUNet/infer.py 25 --no-clean-bone
 
 ## Training
 
-데이터 구조는 [`data/README.md`](data/README.md)를 참고하세요.
+학습 데이터는 [Google Drive에서 다운로드](https://drive.google.com/drive/folders/1uNTCNoBQWgii9hYUwY3jDkA3U5c1iJ4F)한 뒤,
+Drive의 `images`, `masks` 폴더가 각각 `data/images`, `data/masks`가 되도록
+배치합니다. 상세 구조는 [`data/README.md`](data/README.md)를 참고하세요.
 
 ```bash
 python PICOSAM2baseUNet/train.py

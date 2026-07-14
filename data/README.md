@@ -1,8 +1,8 @@
 # Dataset layout
 
-The training dataset is distributed separately from the GitHub repository.
-After downloading it, place the `images` and `masks` folders directly under
-`data`:
+The training dataset is distributed through
+[Google Drive](https://drive.google.com/drive/folders/1uNTCNoBQWgii9hYUwY3jDkA3U5c1iJ4F).
+Download the `images` and `masks` folders, then place them directly under `data`:
 
 ```text
 data/
