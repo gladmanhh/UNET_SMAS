@@ -13,7 +13,7 @@ from torchvision.transforms import functional as VF
 from tqdm import tqdm
 
 from common import DATA_ROOT, RESAMPLE_NEAREST, Size2D, tensor_from_image
-from model import PicoSAM2BaseUNet, count_params
+from model import PicoSAM2BaseUNet, count_params, reparameterize_model
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -305,6 +305,19 @@ def train(args: argparse.Namespace) -> None:
         if metrics["mean_iou"] > best_iou:
             best_iou = metrics["mean_iou"]
             save_checkpoint(run_dir / "best.pt", model, metrics, args)
+
+    # Export a reparameterized (single-branch) checkpoint of the best model for
+    # fast inference. RepVGG fuses its multi-branch train graph into plain 3x3 convs.
+    best_path = run_dir / "best.pt"
+    if best_path.exists():
+        best_ckpt = torch.load(best_path, map_location="cpu", weights_only=False)
+        deploy_model = PicoSAM2BaseUNet(
+            base_channels=args.base_channels, out_channels=len(CLASS_NAMES)
+        )
+        deploy_model.load_state_dict(best_ckpt["model"])
+        deploy_model = reparameterize_model(deploy_model, inplace=True)
+        save_checkpoint(run_dir / "best_deploy.pt", deploy_model, best_ckpt.get("metrics", {}), args)
+        print(f"[Deploy] reparameterized best model -> {run_dir / 'best_deploy.pt'}")
 
     summary = {
         "model": "PicoSAM2BaseUNet",
