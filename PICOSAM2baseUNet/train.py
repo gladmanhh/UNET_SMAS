@@ -13,7 +13,7 @@ from torchvision.transforms import functional as VF
 from tqdm import tqdm
 
 from common import DATA_ROOT, RESAMPLE_NEAREST, Size2D, tensor_from_image
-from model import PicoSAM2BaseUNet, count_params
+from model import PicoSAM2BaseUNet, count_params, reparameterize_model
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -257,7 +257,11 @@ def train(args: argparse.Namespace) -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = PicoSAM2BaseUNet(base_channels=args.base_channels, out_channels=len(CLASS_NAMES)).to(device)
+    model = PicoSAM2BaseUNet(
+        base_channels=args.base_channels,
+        out_channels=len(CLASS_NAMES),
+        num_conv_branches=args.num_conv_branches,
+    ).to(device)
     init_count = 0 if args.no_init else load_backbone_init(model, Path(args.init_from))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=args.amp and device.type == "cuda")
@@ -306,6 +310,21 @@ def train(args: argparse.Namespace) -> None:
             best_iou = metrics["mean_iou"]
             save_checkpoint(run_dir / "best.pt", model, metrics, args)
 
+    # Export a reparameterized (single-branch) checkpoint of the best model for
+    # fast inference. MobileOne fuses its multi-branch train graph into plain convs.
+    best_path = run_dir / "best.pt"
+    if best_path.exists():
+        best_ckpt = torch.load(best_path, map_location="cpu", weights_only=False)
+        deploy_model = PicoSAM2BaseUNet(
+            base_channels=args.base_channels,
+            out_channels=len(CLASS_NAMES),
+            num_conv_branches=args.num_conv_branches,
+        )
+        deploy_model.load_state_dict(best_ckpt["model"])
+        deploy_model = reparameterize_model(deploy_model, inplace=True)
+        save_checkpoint(run_dir / "best_deploy.pt", deploy_model, best_ckpt.get("metrics", {}), args)
+        print(f"[Deploy] reparameterized best model -> {run_dir / 'best_deploy.pt'}")
+
     summary = {
         "model": "PicoSAM2BaseUNet",
         "training": "full-frame image-only mutually exclusive dermis+SMAS+bone multiclass segmentation",
@@ -338,6 +357,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=12)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--base-channels", type=int, default=32)
+    parser.add_argument("--num-conv-branches", type=int, default=1,
+                        help="MobileOne over-parameterization: k x k conv branches per block at train time.")
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--height", type=int, default=192)
     parser.add_argument("--lr", type=float, default=1e-3)

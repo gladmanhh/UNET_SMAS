@@ -11,7 +11,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from common import Size2D, discover_frames, normalize_output_name, resolve_frames_dir, tensor_from_image
-from model import PicoSAM2BaseUNet
+from model import PicoSAM2BaseUNet, reparameterize_model
 
 try:
     import cv2
@@ -73,12 +73,21 @@ def load_model(checkpoint: Path, device: torch.device) -> tuple[torch.nn.Module,
     ckpt = torch.load(checkpoint, map_location=device, weights_only=False)
     ckpt_args = ckpt.get("args", {})
     class_names = ckpt_args.get("class_names", CLASS_NAMES)
+    state = ckpt["model"]
+    # A checkpoint saved after reparameterization already holds fused conv weights.
+    already_deploy = any("reparam_conv" in key for key in state)
     model = PicoSAM2BaseUNet(
         base_channels=int(ckpt_args.get("base_channels", 32)),
         out_channels=int(ckpt_args.get("num_classes", len(class_names))),
+        inference_mode=already_deploy,
+        num_conv_branches=int(ckpt_args.get("num_conv_branches", 1)),
     ).to(device)
-    model.load_state_dict(ckpt["model"])
+    model.load_state_dict(state)
     model.eval()
+    if not already_deploy:
+        # Collapse the multi-branch training graph into single convs for speed.
+        model = reparameterize_model(model, inplace=True).to(device)
+        model.eval()
     return model, ckpt_args
 
 
